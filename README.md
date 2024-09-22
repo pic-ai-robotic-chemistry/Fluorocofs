@@ -1,2 +1,2 @@
 # fluorocofs
-the codes used for extracting aldehyde and amine by llms
+The codes used for extracting aldehyde and amine from PDFs by llms
