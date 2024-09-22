@@ -21,7 +21,7 @@ from langchain_community.document_loaders import PyPDFLoader
 # from langchain.document_loaders import PyPDFLoader
 
 # Initialize OpenAI client
-client = OpenAI()
+client = OpenAI() # ！！！please set and use your openai API keys
 
 # Define the function use of openai API
 # Define the model for each precursor and its usage
