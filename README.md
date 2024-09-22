@@ -21,7 +21,7 @@ The script performs the following tasks:
    The PDFs are loaded and parsed using `PyPDFLoader` from LangChain, which effectively handles scientific text extraction from PDFs.
 
 - **Model Integration**  
-   The script integrates the GPT-4o-mini model from OpenAI with function calls designed to extract aldehyde and amine precursors. The structured output format is defined using `pydantic`, ensuring the response follows a well-defined schema.
+   The script integrates the GPT-4o model from OpenAI with function calls designed to extract aldehyde and amine precursors. The structured output format is defined using `pydantic`, ensuring the response follows a well-defined schema.
 
 - **Response Format**  
    The structured response format includes fields for:
