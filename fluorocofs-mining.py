@@ -139,6 +139,12 @@ for index, file in enumerate(tqdm(files)):
 
     # Control the frequency of API calls
     time.sleep(0.2)
+    
+# Save the Aldehyde precursor DataFrame to a CSV file
+Aldehyde_precursor_used_for.to_csv("Aldehyde_precursor_used_for.csv", index=False)
+
+# Save the Amine precursor DataFrame to a CSV file
+Amine_precursor_used_for.to_csv("Amine_precursor_used_for.csv", index=False)
 
 # Optionally, print the total number of papers processed
 # print(f"Total of {num} papers")
