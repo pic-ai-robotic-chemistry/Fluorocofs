@@ -13,7 +13,7 @@ The script performs the following tasks:
    The extraction of aldehyde and amine precursors is handled via OpenAI’s API, leveraging a structured output format. This format is defined using `pydantic` models to meet OpenAI's API guidelines, ensuring precise and structured data extraction.
 
 3. **Custom GPT-4o-Mini Model Prompt Design**  
-   A custom prompt is designed for the `GPT-4o-mini` model. The prompt directs the model to read the research paper, identify aldehyde and amine precursors, and return the results in a structured format, including the paper title for referencing. This approach is tailored to optimize accuracy and relevance in COF synthesis research.
+   A custom prompt is designed for the `GPT-4o` model. The prompt directs the model to read the research paper, identify aldehyde and amine precursors, and return the results in a structured format, including the paper title for referencing. This approach is tailored to optimize accuracy and relevance in COF synthesis research.
 
 ## Components
 
