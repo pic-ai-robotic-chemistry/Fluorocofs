@@ -3,3 +3,7 @@ pandas
 pydantic
 tqdm
 langchain
+torch
+numpy
+shap
+matplotlib
