@@ -13,7 +13,7 @@ This repository contains two parts:
 Clone the repository and install the required Python libraries:
 
 ```bash
-git clone https://github.com/your-repository/fluorocofs.git
+git clone https://github.com/pic-ai-robotic-chemistry/Fluorocofs.git
 cd fluorocofs
 pip install -r requirements.txt
 ```
