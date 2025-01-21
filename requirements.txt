@@ -7,3 +7,4 @@ torch
 numpy
 shap
 matplotlib
+langchain-community

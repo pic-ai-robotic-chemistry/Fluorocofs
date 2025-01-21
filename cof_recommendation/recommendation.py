@@ -8,7 +8,7 @@ import random
 
 
 # All possible aldehyde and amine pairs. Please change the list according to your dataset.
-POSSIBLE_ALD = ['ald_1', 'ald_5', 'ald_7', 'ald_8', 'ald_10', 'ald_11', 'ald_13', 'ald_20', 'ald_21', 'ald_23', 'ald_24', 'ald_25']
+POSSIBLE_ALD = ['ald_1', 'ald_7', 'ald_8', 'ald_10', 'ald_11', 'ald_13', 'ald_20', 'ald_21', 'ald_23', 'ald_24', 'ald_25']
 POSSIBLE_AMINE = ['amine_8', 'amine_10', 'amine_11', 'amine_12', 'amine_15', 'amine_16', 'amine_17']
 
 
@@ -112,7 +112,36 @@ class CofRecommendation:
                 chosen_pair = pair_name[i]
         return chosen_pair
 
-    def suggest_batch(self, batch_size=5):
+    def evaluate_batch(self, batch):
+        self.train_model()
+        self.model.eval()
+        for pair in batch:
+            pair_vector = get_vector(pair[0], pair[1])
+            x1 = []
+            x2 = []
+            label2 = []
+            for i, evaluated_pair in enumerate(self.chosen_points):
+                evaluated_vector = get_vector(evaluated_pair[0], evaluated_pair[1])
+                x1.append(pair_vector)
+                x2.append(evaluated_vector)
+                label2.append(self.evaluations[i])
+            x1 = torch.Tensor(np.array(x1))
+            x2 = torch.Tensor(np.array(x2))
+            label2 = torch.Tensor(np.array(label2))
+            if self.pretrain:
+                output1 = self.model(x1)
+                output2 = self.model(x2)
+            else:
+                output1, output2 = self.model(x1, x2)
+
+            distances = (output2 - output1).pow(2).sum(1).sqrt()
+            min_val = distances.min()
+            max_val = distances.max()
+            norm_distances = (distances - min_val) / (max_val - min_val)
+            predicted_score = norm_distances.dot(label2).detach().numpy() / len(label2)
+            print('Pair {} predicted score: {}'.format(pair, predicted_score))
+
+    def suggest_batch(self, batch_size=3):
         # suggest the next batch of pairs to evaluate based on the trained model
         self.train_model()
         self.model.eval()
