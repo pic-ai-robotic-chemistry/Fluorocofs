@@ -5,6 +5,7 @@ from data_preprocess import get_vector
 from trainer import training, train_pretrain_siamese_model, init_pretrain_siamese_model
 import numpy as np
 import random
+import pandas as pd
 
 
 # All possible aldehyde and amine pairs. Please change the list according to your dataset.
@@ -112,78 +113,134 @@ class CofRecommendation:
                 chosen_pair = pair_name[i]
         return chosen_pair
 
-    def evaluate_batch(self, batch):
+    def evaluate_batch(self, batch, top_k=3, excel_path='evaluate_results.xlsx'):
+        # Evaluate a batch of candidate pairs using weighted similarity scoring,
+        # then save results to Excel as a 26x20 matrix (rows: amines, columns: alds)
         self.train_model()
         self.model.eval()
-        for pair in batch:
-            pair_vector = get_vector(pair[0], pair[1])
-            x1 = []
-            x2 = []
-            label2 = []
-            for i, evaluated_pair in enumerate(self.chosen_points):
-                evaluated_vector = get_vector(evaluated_pair[0], evaluated_pair[1])
-                x1.append(pair_vector)
-                x2.append(evaluated_vector)
-                label2.append(self.evaluations[i])
-            x1 = torch.Tensor(np.array(x1))
-            x2 = torch.Tensor(np.array(x2))
-            label2 = torch.Tensor(np.array(label2))
-            if self.pretrain:
-                output1 = self.model(x1)
-                output2 = self.model(x2)
-            else:
-                output1, output2 = self.model(x1, x2)
 
-            distances = (output2 - output1).pow(2).sum(1).sqrt()
-            min_val = distances.min()
-            max_val = distances.max()
-            norm_distances = (distances - min_val) / (max_val - min_val)
-            predicted_score = norm_distances.dot(label2).detach().numpy() / len(label2)
-            print('Pair {} predicted score: {}'.format(pair, predicted_score))
+        # Precompute evaluated embeddings and labels
+        evaluated_vectors = [get_vector(p[0], p[1]) for p in self.chosen_points]
+        evaluated_labels = self.evaluations
+        eval_x2 = torch.Tensor(np.array(evaluated_vectors))
+        label2 = torch.Tensor(np.array(evaluated_labels))
 
-    def suggest_batch(self, batch_size=3):
+        results = []  # store dicts: {'amine': node, 'ald': linker, 'score': rounded_score}
+
+        with torch.no_grad():
+            for pair in batch:
+                if self.evaluated(pair):
+                    continue
+
+                # Compute candidate embedding
+                vec1 = torch.Tensor(get_vector(pair[0], pair[1]))
+                x1 = vec1.unsqueeze(0).repeat(eval_x2.size(0), 1)
+
+                # Model inference
+                if self.pretrain:
+                    out1 = self.model(x1)
+                    out2 = self.model(eval_x2)
+                else:
+                    out1, out2 = self.model(x1, eval_x2)
+
+                # Compute squared distances and clamp
+                d2 = (out2 - out1).pow(2).sum(dim=1)
+                d2 = torch.clamp(d2, max=50.0)
+                weights = torch.exp(-d2)
+
+                # Select top_k weights
+                if top_k < weights.size(0):
+                    top_w, top_idx = torch.topk(weights, top_k)
+                    sel_labels = label2[top_idx]
+                    weights = top_w
+                else:
+                    sel_labels = label2
+
+                # Normalize and compute score
+                numerator = (sel_labels * weights).sum()
+                denominator = weights.sum() + 1e-8
+                score = (numerator / denominator).item()
+
+                # Round to integer
+                rounded_score = round(score)
+
+                results.append({
+                    'amine': pair[0],
+                    'ald': pair[1],
+                    'pred_score': rounded_score
+                })
+
+                print(f'Pair {pair} predicted score (rounded): {rounded_score}')
+
+        # Create DataFrame and pivot to 26x20 table
+        df = pd.DataFrame(results)
+        df_matrix = df.pivot(index='amine', columns='ald', values='pred_score')
+        df_matrix.to_excel(excel_path, index=True)
+        print(f'All results saved to {excel_path} (rows=amines, cols=alds)')
+
+    def suggest_batch(self, batch_size=3, top_k=3):
         # suggest the next batch of pairs to evaluate based on the trained model
         self.train_model()
         self.model.eval()
-        x1 = []
-        x2 = []
-        x1_count = []
-        x1_score = []
+
+        pair_scores = []
         pair_name = []
-        label2 = []
-        for pair in self.all_pairs:
-            count = 0
-            if self.evaluated(pair):
-                continue
-            pair_vector = get_vector(pair[0], pair[1])
-            for i, evaluated_pair in enumerate(self.chosen_points):
-                evaluated_vector = get_vector(evaluated_pair[0], evaluated_pair[1])
-                x1.append(pair_vector)
-                x2.append(evaluated_vector)
-                label2.append(self.evaluations[i])
-                count += 1
-            x1_count.append(count)
-            pair_name.append(pair)
 
-        x1 = torch.Tensor(np.array(x1))
-        x2 = torch.Tensor(np.array(x2))
-        label2 = torch.Tensor(np.array(label2))
-        if self.pretrain:
-            output1 = self.model(x1)
-            output2 = self.model(x2)
-        else:
-            output1, output2 = self.model(x1, x2)
-        weighted_distances = label2 / torch.exp((output2 - output1).pow(2).sum(1))
+        # Precompute evaluated vectors and labels
+        evaluated_vectors = [get_vector(p[0], p[1]) for p in self.chosen_points]
+        evaluated_labels = self.evaluations  # list of floats or tensors
 
-        # get average score
-        pointer = 0
-        for i, count in enumerate(x1_count):
-            score = weighted_distances[pointer:pointer + count].sum() / count
-            x1_score.append(score.detach().numpy())
-            pointer = pointer + count
-        x1_score = np.array(x1_score)
-        chosen_index = np.argsort(x1_score)[-batch_size:]
-        chosen_pair = []
-        for index in chosen_index:
-            chosen_pair.append(pair_name[index])
-        return chosen_pair, x1_score[-batch_size:]
+        # Stack evaluated tensors once
+        eval_x2 = torch.Tensor(np.array(evaluated_vectors))
+        label2 = torch.Tensor(np.array(evaluated_labels))
+
+        with torch.no_grad():
+            # Process each candidate pair
+            for pair in self.all_pairs:
+                if self.evaluated(pair):
+                    continue
+
+                # Get embedding for candidate
+                vec1 = torch.Tensor(get_vector(pair[0], pair[1]))
+                # Expand to match number of evaluated points
+                x1 = vec1.unsqueeze(0).repeat(eval_x2.size(0), 1)
+
+                # Model forward
+                if self.pretrain:
+                    out1 = self.model(x1)
+                    out2 = self.model(eval_x2)
+                else:
+                    out1, out2 = self.model(x1, eval_x2)
+
+                # Compute squared distances
+                d2 = (out2 - out1).pow(2).sum(dim=1)
+                # Clamp for numerical stability
+                d2 = torch.clamp(d2, max=50.0)
+
+                # Compute Gaussian-like weights
+                weights = torch.exp(-d2)
+
+                # Keep only top_k largest weights
+                if top_k < weights.size(0):
+                    top_weights, top_idx = torch.topk(weights, top_k)
+                    selected_labels = label2[top_idx]
+                    weights = top_weights
+                else:
+                    selected_labels = label2
+
+                # Weighted normalization and scoring
+                numerator = (selected_labels * weights).sum()
+                denominator = weights.sum() + 1e-8  # avoid div zero
+                score = (numerator / denominator).item()
+
+                pair_name.append(pair)
+                pair_scores.append(score)
+
+        # Convert to numpy array for sorting
+        scores_arr = np.array(pair_scores)
+        # Select best batch_size pairs
+        chosen_idx = np.argsort(scores_arr)[-batch_size:]
+        chosen_pairs = [pair_name[i] for i in chosen_idx]
+        chosen_scores = scores_arr[chosen_idx]
+
+        return chosen_pairs, chosen_scores
